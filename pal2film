@@ -1,0 +1,324 @@
+#!/bin/zsh
+# pal2film - change from 25 fps to 23.976 fps without reencoding video
+# and adjusting audio so there's no change in audio pitch
+# (c) 2020-2025, Simone Karin Lehmann, BSD 2 clause license
+
+# default settings
+bitrate_ac3=448k
+bitrate_aac=256k
+drcscale="-drc_scale 0.5"
+
+### internal vars
+src=25025
+dest=24000
+orig=
+in_audio=
+output=
+new_audio=
+new_chapters="new_chaps.txt"
+new_subtitles="new_sub.srt"
+remux_video="remux_video.mp4"
+vtag=
+audio_map=
+bitrate=
+acount=
+chap_map=
+audio_lang=
+resample=
+forceaac=
+subtitle=
+drc=
+nopitch=
+soxr_support=
+volume="0.0dB"
+peak=
+clev=
+slev=
+
+function usage()
+{
+  echo "pal2film [options] filename"
+  echo "change from 25 fps to 23.976 fps without reencoding video"
+  echo "and adjusting audio so there's no change in audio pitch"
+  echo "options:"
+  echo "     -i:   input pal video"
+  echo "     -a:   file which contains audio streams to process"
+  echo "     -aac: force aac, downmix if necessary"
+  echo "     -drc: set dyamic range compression used for ac3 input (default 0.5)"
+  echo "     -b:   set audio bitrate (deafult ac3: 448k, aac: 256k)"
+  echo "     -np:  no pitch correction (audio speed change only)"
+  echo "     -peak: set peak volume normalization (in dB, e.g. -1.0dB)"
+  echo "     -vol: set volume adjustment (ffmpeg volume filter syntax, default 0.0dB)"
+  echo "     -o:   output filename"
+  echo "     -s:   process only subtitle (srt only)"
+  echo "     -n:   dry run (no conversion)"
+  echo "     -h:   this info"
+  exit
+}
+
+function echoerr()
+{
+  echo "*** $1"
+  exit 1
+}
+
+function change_chapters()
+{
+  local line time newtime
+  echo "---> chapters"
+  [ "$dry" = "yes" ] && return
+  ffmpeg -loglevel quiet -hide_banner -i "$1" -vn -an -f ffmetadata "chaps.txt"
+  
+  [ -e "$new_capters" ] && rm "$new_chapters"
+  while read line; do
+    time=$(echo "$line" | grep -e START -e END | sed -e "s/.*=//")
+    
+    if [ ! -z "$time" ]; then
+      newtime=$(echo "$time * $src / $dest" | bc)
+      line=$(echo "$line" | sed -e "s/$time/$newtime/")
+    fi
+    
+    echo "$line" >> "$new_chapters"
+  done < "chaps.txt"
+  rm -f "chaps.txt"
+}
+
+function change_subtitle_time()
+{
+    local hour min sec msec total
+    echo "$1" | tr ":.," " " | read -r hour min sec msec
+    total=$(echo "(($hour * 3600 + $min * 60 + $sec) * 1000 + $msec) * $src / $dest" | bc)
+    date -ur "${total:0:-3}" "+%H:%M:%S,${total: -3}"
+}
+
+function change_subtitle()
+{
+  local line tline start end
+  echo "---> subitle"
+  test -e "$new_subtitles" && rm "$new_subtitles"
+  [ "$dry" = "yes" ] && return
+  while read line; do
+    tline=$(echo "$line" | grep " --> ")
+    
+    if [ ! -z "$tline" ]; then
+      start=$(echo "$tline" | sed -e "s/ -->.*//")
+      end=$(echo "$tline" | sed -e "s/.* --> //")
+      start=$(change_subtitle_time "$start")
+      end=$(change_subtitle_time "$end")
+      line="$start --> $end"
+    fi
+    
+    echo "$line" >> "$new_subtitles"
+  done < "$1"
+}
+
+function get_acodec_count()
+{
+  acount=$(ffprobe -v error -select_streams a -show_entries stream=index -of default=nw=1 "$1" | wc -l | xargs)
+  chap_map=$(($acount + 1))
+}
+
+function get_mix_levels()
+{
+  local result=$(mediainfo "$1" | grep mixlev | tr -d " " | sed "s/:/=/;s/ur//;s/mix//")
+  eval $result
+}
+
+function get_acodec_info()
+{
+  id=${2:-0} # default for id is 0
+  local language=
+  drc=
+  resample="aresample=resampler=swr"
+  [ "$soxr_support" = "soxr" ] && resample="aresample=resampler=soxr"
+
+  settings=$(ffprobe -v error -select_streams a:$id -show_entries stream=codec_name,sample_rate,channels,start_time:stream_tags=language  -of default=nw=1 "$1" | sed "s|TAG:||")
+  eval $settings
+  if [ "$codec_name" = "ac3" ]; then
+    bit_rate=$bitrate_ac3
+    drc="$drcscale"
+    get_mix_levels "$1"
+    [ "$channels" = 6 ] && levels="-center_mixlev $clev -surround_mixlev $slev" || levels=
+    if [ "$forceaac" = "yes" ]; then
+      levels=
+      codec_name="aac"
+      if [ "$channels" = "6" ]; then
+        channels=2        
+        resample="${resample}:matrix_encoding=dplii:clev=${clev}:slev=${slev}:lfe_mix_level=1.0"
+      fi
+    fi
+  fi
+  if [ "$codec_name" = "mp3" ]; then
+    codec_name="aac"
+  fi
+
+  new_audio="new_audio_$id.$codec_name"
+
+  if [ "$codec_name" = "aac" ]; then
+    bit_rate=$bitrate_aac
+    codec_name="aac_at"
+  fi
+
+  # if bitrate is set from command line, override default
+  if [ -n "$bitrate" ]; then
+    bit_rate=$bitrate
+  fi  
+
+  if [ -n $language ]; then
+    audio_lang="$audio_lang -metadata:s:a:$id language=$language"
+  fi
+}
+
+function get_vcodec_info()
+{
+  local settings=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,r_frame_rate,time_base  -of default=nw=1 "$1")
+  eval $settings
+  [ "$codec_name" = "hevc" ] && vtag="-vtag hvc1"
+  fps=$(echo "$r_frame_rate" | cut -d "/" -f1)
+  tbn=$(echo "$time_base" | cut -d "/" -f2)
+}
+
+function change_audio()
+{
+  local command peakcommand id max_volume factor
+  get_acodec_count "$1"
+  id=0
+  while [ $id -lt $acount ]; do
+    get_acodec_info "$1" "$id"
+    command="ffmpeg -loglevel quiet -stats -hide_banner $drc -i '$1' -vn -map 0:a:$id -c:a $codec_name -ac $channels -b:a $bit_rate $levels"
+
+    # get peak volume normalization
+    if [ -n "$peak" ]; then
+      peakcommand="$command -af ${resample},volume=0.0dB,volumedetect -loglevel info -f null /dev/null 2>&1 | grep 'max_volume' | sed -e 's/.*: //;s/ dB//'"
+      echo "---> calc peak volume audio $id"
+      if [ "$dry" = "yes" ]; then 
+        echo "$command"
+      else
+        max_volume=$(eval $peakcommand)
+        volume=$(echo "$peak - $max_volume" | bc -l)dB
+      fi
+    fi
+
+    # check if no pitch correction is wanted
+    if [ "$nopitch" = "yes" ]; then
+      factor=$(echo "$sample_rate * $dest / $src" | bc -l)
+      resample="${resample},volume=$volume,asetrate=$factor,aresample=$sample_rate"
+    else
+      resample="${resample},volume=$volume,atempo=$dest/$src"
+    fi
+    # shorten command by deleting swr resampler only for ac3 encoding
+    resample="${resample/aresample=resampler=swr,/}"
+ 
+    command="$command -af $resample -y '$new_audio'"
+    echo "---> audio $id"
+    [ "$dry" = "yes" ] && echo "$command" || eval $command
+
+    audio="$audio -itsoffset $start_time -i $new_audio"
+    id=$(($id + 1))
+    audio_map="$audio_map -map $id"
+  done
+}
+
+function remux_video()
+{
+  local command
+  echo "--> remuxing video to tbn 24000"
+  command="ffmpeg -loglevel quiet -stats -hide_banner -i '$orig' -c copy -video_track_timescale 24000 -y '$remux_video'"
+  [ "$dry" = "yes" ] && echo "$command" || eval $command
+  orig="$remux_video"
+}
+
+function change_video_mux()
+{
+  local command factor
+  echo "---> video and muxing"  
+  factor=$(echo "$src / $dest" | bc -l)
+  command="ffmpeg -loglevel quiet -stats -hide_banner -itsscale $factor -i '$1' $audio -i '$new_chapters' -map 0:v $audio_map $audio_lang -map_chapters $chap_map -c copy $vtag -y '$2'"
+  [ "$dry" = "yes" ] && echo "$command" || eval $command
+}
+
+
+function change_all()
+{
+  echo
+  echo "---> ### converting pal to film: $orig ###"
+
+  if [ -n "$in_audio" ]; then
+    change_audio "$in_audio"
+    change_chapters "$in_audio"
+  else
+    change_audio "$orig"
+    change_chapters "$orig"
+  fi
+  change_video_mux "$orig" "$output"
+  rm -f new_audio_* "$new_chapters" "$new_subtitles" "$remux_video" 2>/dev/null
+}
+
+
+### main
+
+[[ $# -eq 0 ]] && usage
+
+while [ "$#" -gt 0 ] ; do
+  case "$1" in
+    -i) orig="$2"
+      shift
+    ;;
+    -a) in_audio="$2"
+      shift
+    ;;
+    -aac) forceaac="yes"
+    ;;
+    -drc) drcscale="-drc_scale $2"
+      shift
+      ;;
+    -b) bitrate="$2"
+      shift
+      ;;
+    -np) nopitch="yes"
+    ;;
+    -vol) volume="$2"
+      shift
+    ;;
+    -peak) peak="$(echo ${2/dB/})"
+      shift
+    ;;
+    -s) orig="$2"
+      subtitle="yes"
+      shift
+    ;;
+    -o) output="$2"
+      shift
+    ;;
+    -n) dry="yes"
+    ;;
+    -h) usage
+    ;;
+    *) usage
+    ;;
+  esac
+  shift 
+done
+
+[ ! -e "$orig" ] && echoerr "No such file: $orig"
+[ -z "$output" ] && echoerr "No output specified"
+
+ext=${orig##*.}
+[ "$ext" != "mp4" -a "$ext" != "srt"  ] && echoerr "No mp4 or srt: $2"
+
+# process only srt subtitle
+[ "$subtitle" = "yes" ] && { change_subtitle "$orig"; exit; }
+
+# convert a pal video (25 fps) to ntsc film (23.976 fps)
+
+get_vcodec_info "$orig"
+
+[ "$fps" != "25" ] && echoerr "Not a pal video. fps: $fps"
+
+[ "$tbn" -ne "24000" ] && remux_video
+
+# check for libsoxr support for aresample
+soxr_support=$(ffmpeg 2>&1 | grep -o soxr)
+
+change_all
+
