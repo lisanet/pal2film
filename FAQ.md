@@ -42,7 +42,7 @@ Reversing PAL speedup restores:
 - correct musical pitch
 - theatrical timing
 
-This is why the `-np` option is often recommended for English audio.
+This is why the `-np` option in pal2film is often recommended for English audio.
 
 
 ## ❓ What about dubbed audio tracks?
