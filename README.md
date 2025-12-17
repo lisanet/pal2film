@@ -37,7 +37,7 @@ options:
      -i:   input pal video
      -a:   file which contains audio streams to process
      -aac: force aac, downmix if necessary
-     -drc: set dyamic range compression used for ac3 input (default 0.5)
+     -drc: set dyamic range compression used for ac3 input (default 0.0)
      -b:   set audio bitrate (deafult ac3: 448k, aac: 256k)
      -np:  no pitch correction (audio speed change only)
      -peak: set peak volume normalization (in dB, e.g. -1.0dB)

@@ -6,7 +6,7 @@
 # default settings
 bitrate_ac3=448k
 bitrate_aac=256k
-drcscale="-drc_scale 0.5"
+drcscale="-drc_scale 0.0"
 
 ### internal vars
 src=25025
@@ -44,7 +44,7 @@ function usage()
   echo "     -i:   input pal video"
   echo "     -a:   file which contains audio streams to process"
   echo "     -aac: force aac, downmix if necessary"
-  echo "     -drc: set dyamic range compression used for ac3 input (default 0.5)"
+  echo "     -drc: set dyamic range compression used for ac3 input (default 0.0)"
   echo "     -b:   set audio bitrate (deafult ac3: 448k, aac: 256k)"
   echo "     -np:  no pitch correction (audio speed change only)"
   echo "     -peak: set peak volume normalization (in dB, e.g. -1.0dB)"
