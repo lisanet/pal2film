@@ -22,7 +22,6 @@ It converts **25 fps PAL masters** back to their original **23.976 fps (24000/10
 ## 🔊 Audio Format Handling
 
 - AC3, AAC, MP3 input supported
-- MP3 is automatically converted to AAC
 - Optional downmixing to Dolby Pro Logic II matrix encoding including LFE channel
 - Dynamic Range Compression adjustable
 - Manual volume adjustment
