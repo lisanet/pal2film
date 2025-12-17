@@ -105,7 +105,7 @@ sudo cp pal2film /usr/local/bin
 Almost all motion pictures are produced at 23.976 fps. The PAL television standard, however, uses 25 fps.
 
 Instead of frame interpolation, PAL releases historically applied a speed-up factor of `25 / 23.976`,
-or, more precisely, `25 / (24000 / 1001) = 25000 / 24000 = 1.0416667`.
+or, more precisely, `25 / (24000 / 1001) = 25050 / 24000 = 1.04375`.
 
 
 This speedup results in a ~4.3% faster playback, shorter runtime and increased audio pitch (unless corrected).
