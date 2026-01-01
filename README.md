@@ -14,7 +14,7 @@ It converts **25 fps PAL masters** back to their original **23.976 fps (24000/10
 * Exact 25 → 23.976 fps timing restoration
 * Audio speed and pitch control
 * Chapter timestamp correction
-* Subtitle timestamp correction
+* Subtitle timestamp correction (separate srt only)
 * Multi-audio stream support
 * Language metadata preservation
 * Dry-run mode for inspection
