@@ -131,6 +131,8 @@ function get_acodec_info()
   drc=
   resampler="resampler=swr"
   [ "$soxr_support" = "soxr" ] && resampler="resampler=soxr:precision=28"
+  
+  aresample="aresample=${resampler}"
 
   settings=$(ffprobe -v error -select_streams a:$id -show_entries stream=codec_name,sample_rate,channels,start_time:stream_tags=language  -of default=nw=1 "$1" | sed "s|TAG:||")
   eval $settings
