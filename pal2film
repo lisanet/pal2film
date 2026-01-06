@@ -199,7 +199,7 @@ function change_audio()
       peakcommand="$command -af ${aresample},volume=0.0dB,volumedetect -loglevel info -f null /dev/null 2>&1 | grep 'max_volume' | sed -e 's/.*: //;s/ dB//'"
       echo "---> calc peak volume audio $id"
       if [ "$dry" = "yes" ]; then 
-        echo "$command"
+        echo "$peakcommand"
       else
         max_volume=$(eval $peakcommand)
         volume=$(echo "$peak - $max_volume" | bc -l)dB
