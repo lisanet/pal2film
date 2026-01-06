@@ -137,8 +137,6 @@ function get_acodec_info()
   resampler="resampler=swr"
   [ "$soxr_support" = "soxr" ] && resampler="resampler=soxr:precision=28"
   
-  aresample="aresample=${resampler}"
-
   settings=$(ffprobe -v error -select_streams a:$id -show_entries stream=codec_name,sample_rate,channels,start_time:stream_tags=language  -of default=nw=1 "$1" | sed "s|TAG:||")
   eval $settings
   if [ "$codec_name" = "ac3" ]; then
@@ -196,7 +194,10 @@ function change_audio()
 
     # get peak volume normalization
     if [ -n "$peak" ]; then
-      peakcommand="$command -af ${aresample},volume=0.0dB,volumedetect -loglevel info -f null /dev/null 2>&1 | grep 'max_volume' | sed -e 's/.*: //;s/ dB//'"
+      aresample="${aresample},volume=0.0dB,volumedetect"
+      # remove leading , if any
+      aresample=${aresample#,}
+      peakcommand="$command -af ${aresample} -loglevel info -f null /dev/null 2>&1 | grep 'max_volume' | sed -e 's/.*: //;s/ dB//'"
       echo "---> calc peak volume audio $id"
       if [ "$dry" = "yes" ]; then 
         echo "$peakcommand"
@@ -213,8 +214,8 @@ function change_audio()
     else
       aresample="${aresample},volume=$volume,atempo=$dest/$src"
     fi
-    # shorten command by deleting swr resampler only for ac3 encoding
-    aresample="${aresample/aresample=resampler=swr,/}"
+    # remove leading , if any
+    aresample=${aresample#,}
  
     command="$command -af $aresample -y '$new_audio'"
     echo "---> audio $id"
@@ -231,7 +232,7 @@ function remux_video()
   local command
   echo "--> remuxing video to tbn 24000"
   command="ffmpeg -loglevel quiet -stats -hide_banner -i '$orig' -c copy -video_track_timescale 24000 -y '$remux_video'"
-  [ "$dry" = "yes" ] && echo "$command" || eval $command
+  [ "$dry" = "yes" ] && { echo "$command"; return; } || eval $command
   orig="$remux_video"
 }
 
