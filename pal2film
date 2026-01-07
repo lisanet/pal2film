@@ -32,8 +32,8 @@ nopitch=
 soxr_support=
 volume="0.0dB"
 peak=
-clev=
-slev=
+cmixlev=
+surmixlev=
 
 function usage()
 {
@@ -120,11 +120,11 @@ function get_acodec_count()
 
 function get_mix_levels()
 {
-  local result=$(mediainfo "$1" | grep mixlev | tr -d " " | sed "s/:/=/;s/ur//;s/mix//")
+  local result=$(mediainfo "$1" | grep mixlev | tr -d " " | sed "s/:/=/")
   eval $result
   if [ "$channels" = "6" ]; then
-    clev=${clev:-3dB}
-    slev=${slev:-3dB}
+    cmixlev=${cmixlev:-3dB}
+    surmixlev=${surmixlev:-3dB}
   fi
 }
 
@@ -146,13 +146,13 @@ function get_acodec_info()
     bit_rate=$bitrate_ac3
     drc="$drcscale"
     get_mix_levels "$1"
-    [ "$channels" = 6 ] && levels="-center_mixlev $clev -surround_mixlev $slev" || levels=
+    [ "$channels" = 6 ] && levels="-center_mixlev $cmixlev -surround_mixlev $surmixlev" || levels=
     if [ "$forceaac" = "yes" ]; then
       levels=
       codec_name="aac"
       if [ "$channels" = "6" ]; then
         channels=2        
-        aresample="aresample=${resampler}:matrix_encoding=dplii:clev=${clev}:slev=${slev}:lfe_mix_level=1.0"
+        aresample="aresample=${resampler}:matrix_encoding=dplii:cmixlev=${cmixlev}:surmixlev=${surmixlev}:lfe_mix_level=1.0"
       fi
     fi
   fi
