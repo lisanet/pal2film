@@ -137,7 +137,11 @@ function get_acodec_info()
   resampler="resampler=swr"
   [ "$soxr_support" = "soxr" ] && resampler="resampler=soxr:precision=28"
   
-  settings=$(ffprobe -v error -select_streams a:$id -show_entries stream=codec_name,sample_rate,channels,start_time:stream_tags=language  -of default=nw=1 "$1" | sed "s|TAG:||")
+  # get info from the middle of the video to avoid intros/outros with different audio settings
+  local duration=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$file")
+  local ts=$(echo "$duration / 2" | bc -l )
+  settings=$(ffprobe -v error -select_streams a:$id -show_entries stream=codec_name,sample_rate,channels,start_time:stream_tags=language \
+            -read_intervals "$ts%+1" -of flat "$1" |  sed "s/.*\.//")
   eval $settings
   if [ "$codec_name" = "ac3" ]; then
     bit_rate=$bitrate_ac3
