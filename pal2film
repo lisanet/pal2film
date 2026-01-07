@@ -34,10 +34,12 @@ volume="0.0dB"
 peak=
 cmixlev=
 surmixlev=
+version="2026-01"
 
 function usage()
 {
   echo "pal2film [options] filename"
+  echo "version: $version"
   echo "change from 25 fps to 23.976 fps without reencoding video"
   echo "and adjusting audio so there's no change in audio pitch"
   echo "options:"
