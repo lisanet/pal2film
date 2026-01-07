@@ -34,7 +34,6 @@ volume="0.0dB"
 peak=
 clev=
 slev=
-dplii=
 
 function usage()
 {
@@ -123,7 +122,7 @@ function get_mix_levels()
 {
   local result=$(mediainfo "$1" | grep mixlev | tr -d " " | sed "s/:/=/;s/ur//;s/mix//")
   eval $result
-  if [ "$channels" = "6" ] || [ "$dplii" = "yes" ]; then
+  if [ "$channels" = "6" ]; then
     clev=${clev:-3dB}
     slev=${slev:-3dB}
   fi
@@ -151,7 +150,7 @@ function get_acodec_info()
     if [ "$forceaac" = "yes" ]; then
       levels=
       codec_name="aac"
-      if [ "$channels" = "6" ] || [ "$dplii" = "yes" ]; then
+      if [ "$channels" = "6" ]; then
         channels=2        
         aresample="aresample=${resampler}:matrix_encoding=dplii:clev=${clev}:slev=${slev}:lfe_mix_level=1.0"
       fi
@@ -280,8 +279,6 @@ while [ "$#" -gt 0 ] ; do
       shift
     ;;
     -aac) forceaac="yes"
-    ;;
-    -dplii) dplii="yes"
     ;;
     -drc) drcscale="-drc_scale $2"
       shift
