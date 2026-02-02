@@ -14,9 +14,10 @@ dest=24000
 orig=
 in_audio=
 output=
+uuid=
 new_audio=
-new_chapters="new_chaps.txt"
-remux_video="remux_video.mp4"
+new_chapters=
+remuxed=
 vtag=
 audio_map=
 bitrate=
@@ -69,9 +70,9 @@ function change_chapters()
   local line time newtime
   echo "---> chapters"
   [ "$dry" = "yes" ] && return
-  ffmpeg -loglevel quiet -hide_banner -i "$1" -vn -an -f ffmetadata "chaps.txt"
+  ffmpeg -loglevel quiet -hide_banner -i "$1" -vn -an -f ffmetadata "$uuid-temp.txt"
   
-  [ -e "$new_capters" ] && rm "$new_chapters"
+  new_chapters="$uuid-chp.txt"
   while read line; do
     time=$(echo "$line" | grep -e START -e END | sed -e "s/.*=//")
     
@@ -81,8 +82,8 @@ function change_chapters()
     fi
     
     echo "$line" >> "$new_chapters"
-  done < "chaps.txt"
-  rm -f "chaps.txt"
+  done < "$uuid-temp.txt"
+  rm -f "$uuid-temp.txt"
 }
 
 function change_subtitle_time()
@@ -162,7 +163,8 @@ function get_acodec_info()
     codec_name="aac"
   fi
 
-  new_audio="new_audio_$id.$codec_name"
+  #new_audio="new_audio_$id.$codec_name"
+  new_audio="$uuid-a_$id.$codec_name"
 
   if [ "$codec_name" = "aac" ]; then
     bit_rate=$bitrate_aac
@@ -236,9 +238,10 @@ function remux_video()
 {
   local command
   echo "--> remuxing video to tbn 24000"
-  command="ffmpeg -loglevel quiet -stats -hide_banner -i '$orig' -c copy -video_track_timescale 24000 -y '$remux_video'"
+  remuxed="$uuid-rmx.mp4"
+  command="ffmpeg -loglevel quiet -stats -hide_banner -i '$orig' -c copy -video_track_timescale 24000 -y '$remuxed'"
   [ "$dry" = "yes" ] && { echo "$command"; return; } || eval $command
-  orig="$remux_video"
+  orig="$remuxed"
 }
 
 function change_video_mux()
@@ -256,6 +259,8 @@ function change_all()
   echo
   echo "---> ### converting pal to film: $orig ###"
 
+  uuid=$(uuidgen)
+  uuid=${uuid:0:8}
   if [ -n "$in_audio" ]; then
     change_audio "$in_audio"
     change_chapters "$in_audio"
@@ -264,7 +269,7 @@ function change_all()
     change_chapters "$orig"
   fi
   change_video_mux "$orig" "$output"
-  rm -f new_audio_* "$new_chapters" "$remux_video" 2>/dev/null
+  rm -f "$uuid"* 2>/dev/null
 }
 
 
